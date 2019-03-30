@@ -56,27 +56,20 @@
     command: swapoff -a
     when: ansible_swaptotal_mb > 0
 
-  - name: Add an apt signing key for Kubernetes
-    apt_key:
-      url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-      state: present
-
-  - name: Adding apt repository for Kubernetes
-    apt_repository:
-      repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
-      state: present
-      filename: kubernetes.list
-
   - name: Install Kubernetes binaries
     apt: 
       name: "{{ packages }}"
       state: present
       update_cache: yes
+      allow_unauthenticated: yes
     vars:
       packages:
         - kubelet 
         - kubeadm 
         - kubectl
+
+  - name: Pull images
+    command: bash /vagrant/docker_images.sh
 
   - name: Initialize the Kubernetes cluster using kubeadm
     command: kubeadm init --apiserver-advertise-address="10.0.0.20" --apiserver-cert-extra-sans="10.0.0.20"  --node-name k8s-master --pod-network-cidr=10.0.0.0/8
@@ -91,13 +84,6 @@
   - name: Install calico pod network
     become: false
     command: kubectl create -f https://docs.projectcalico.org/v3.4/getting-started/kubernetes/installation/hosted/calico.yaml
-
-  - name: Generate join command
-    command: kubeadm token create --print-join-command
-    register: join_command
-
-  - name: Copy join command to local file
-    local_action: copy content="{{ join_command.stdout_lines[0] }}" dest="./join-command"
 
   handlers:
     - name: docker status
