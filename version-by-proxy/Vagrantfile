@@ -4,12 +4,22 @@
 IMAGE_NAME = "bento/ubuntu-16.04"
 N = 2
 
+$bootstrap=<<SCRIPT
+cat <<EOF > /etc/apt/sources.list.d/kubernetes.list
+deb http://mirrors.aliyun.com/ubuntu/ xenial main restricted
+deb http://mirrors.aliyun.com/ubuntu/ xenial-updates main restricted
+deb http://mirrors.aliyun.com/ubuntu/ xenial universe
+deb http://mirrors.aliyun.com/ubuntu/ xenial-updates universe
+deb http://mirrors.aliyun.com/ubuntu/ xenial multiverse
+deb http://mirrors.aliyun.com/ubuntu/ xenial-updates multiverse
+deb http://mirrors.aliyun.com/ubuntu/ xenial-backports main restricted universe multiverse
+deb https://mirrors.aliyun.com/kubernetes/apt kubernetes-xenial main
+EOF
+apt-get update
+SCRIPT
+
+
 Vagrant.configure("2") do |config|
-  	if Vagrant.has_plugin?("vagrant-proxyconf")
-  	  config.proxy.http     = "http://192.168.0.107:8118/"  # 本机代理ip端口
-  	  config.proxy.https    = "http://192.168.0.107:8118/"  
-  	  config.proxy.no_proxy = "0,1,2,3,4,5,6,7,8,9,10.0.0.0/8,https://10.0.0.20,https://10.0.0.11, https://10.0.0.12"
-  	end
     config.ssh.insert_key = false
 
     config.vm.provider "virtualbox" do |v|
@@ -19,21 +29,27 @@ Vagrant.configure("2") do |config|
       
     config.vm.define "k8s-master" do |master|
         master.vm.box = IMAGE_NAME
-        master.vm.network "private_network", ip: "10.0.0.20"
+        master.vm.network "private_network", ip: "192.168.50.10"
         master.vm.hostname = "k8s-master"
+        master.vm.provision :shell, inline: $bootstrap
         master.vm.provision "ansible" do |ansible|
             ansible.playbook = "kubernetes-setup/master-playbook.yml"
+            # ansible.raw_arguments = ['--ask-pass', '--ask-become-pass']
         end
+		master.vm.synced_folder ".", "/vagrant", create: true, owner: "root", group: "root", mount_options: ["dmode=777","fmode=777"]
     end
 
     (1..N).each do |i|
         config.vm.define "node-#{i}" do |node|
             node.vm.box = IMAGE_NAME
-            node.vm.network "private_network", ip: "10.0.0.#{i + 10}"
+            node.vm.network "private_network", ip: "192.168.50.#{i + 10}"
             node.vm.hostname = "node-#{i}"
+            node.vm.provision :shell, inline: $bootstrap
             node.vm.provision "ansible" do |ansible|
                 ansible.playbook = "kubernetes-setup/node-playbook.yml"
+                # ansible.raw_arguments = ['--ask-pass', '--ask-become-pass']
             end
+			node.vm.synced_folder ".", "/vagrant", create: true, owner: "root", group: "root", mount_options: ["dmode=777","fmode=777"]
         end
     end
 end
